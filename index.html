@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPL FRIEND AUCTION 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0f19; color: #fff; margin: 0; padding: 12px; }
+        .header-card { background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); position: sticky; top: 10px; z-index: 100; }
+        .user-badge { font-size: 13px; color: #bfdbfe; margin-bottom: 4px; font-weight: bold; }
+        .wallet-amount { font-size: 24px; font-weight: bold; color: #ffffff; }
+        .auction-box { background: #151d30; border-radius: 16px; padding: 15px; border: 1px solid #1e293b; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .img-container { width: 100%; border-radius: 12px; overflow: hidden; background: #0b0f19; border: 2px solid #334155; text-align: center; padding: 5px; }
+        .img-container img { width: 100%; height: auto; max-height: 450px; object-fit: contain; display: block; margin: 0 auto; border-radius: 8px; }
+        .player-details { margin: 12px 0; text-align: center; }
+        .player-name { font-size: 24px; font-weight: bold; margin: 0; color: #f8fafc; }
+        .player-role { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .bid-display { background: #0b0f19; border-radius: 10px; padding: 10px; margin: 12px 0; border: 1px solid #22c55e; text-align: center; }
+        .highest-bid { font-size: 26px; color: #22c55e; font-weight: bold; }
+        .bidder-tag { font-size: 12px; color: #94a3b8; }
+        .input-group { margin-bottom: 10px; }
+        .input-row { display: flex; gap: 8px; margin-top: 8px; }
+        .custom-input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0b0f19; color: #fff; font-size: 14px; margin-top: 6px; }
+        .btn-bid { width: 100%; margin-top: 10px; padding: 14px; background: #22c55e; color: #000; font-weight: bold; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
+        .btn-host-action { padding: 8px 12px; background: #f59e0b; color: #000; font-weight: bold; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; margin-right: 4px; margin-top: 6px; }
+        .btn-add-friend { width: 100%; margin-top: 10px; padding: 12px; background: #ef4444; color: #fff; font-weight: bold; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; }
+        .btn-claim-host { width: 100%; padding: 10px; background: #eab308; color: #000; font-weight: bold; border: none; border-radius: 8px; margin-bottom: 15px; cursor: pointer; }
+        .feed { margin-top: 15px; background: #0b0f19; border-radius: 10px; padding: 10px; max-height: 180px; overflow-y: auto; border: 1px solid #1e293b; }
+        .feed-item { padding: 6px 0; border-bottom: 1px solid #1e293b; font-size: 12px; line-height: 1.4; }
+        .feed-user { font-weight: bold; color: #38bdf8; }
+        .feed-amount { color: #22c55e; font-weight: bold; }
+        .feed-host { color: #f59e0b; font-weight: bold; }
+        .section-title { font-size: 14px; font-weight: bold; color: #ef4444; margin-bottom: 8px; text-transform: uppercase; }
+        .active-badge { background: #22c55e; color: #000; font-size: 11px; padding: 4px 8px; border-radius: 12px; font-weight: bold; display: inline-block; margin-bottom: 8px; }
+        .host-controls { background: #1e1b4b; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px dashed #6366f1; }
+        .edit-box { background: #0b0f19; padding: 10px; border-radius: 8px; margin-top: 8px; border: 1px solid #334155; }
+    </style>
+</head>
+<body>
+
+    <div class="header-card">
+        <div class="user-badge" id="userBadge">Bidding as: Guest</div>
+        <div class="wallet-amount" id="userWallet">Budget: ₹650.00 Cr</div>
+    </div>
+
+    <button class="btn-claim-host" id="hostClaimBtn" onclick="claimHostAccess()">🔑 Host Login (Optional - Enter Password)</button>
+
+    <div class="auction-box" id="adminPanel" style="border-color: #ef4444; display: none;">
+        <div class="section-title">👑 Host Panel: Add Friends to Queue</div>
+        <input type="text" id="newFriendName" class="custom-input" placeholder="Friend's Name">
+        <input type="text" id="newFriendStats" class="custom-input" placeholder="Specs / Roast">
+        <input type="text" id="newFriendImg" class="custom-input" placeholder="Image Direct Link">
+        <input type="number" id="newFriendStartBid" class="custom-input" placeholder="Starting Base Price (₹ Cr)">
+        <button class="btn-add-friend" onclick="addNewFriend()">ADD FRIEND TO AUCTION QUEUE</button>
+    </div>
+
+    <div id="activeAuctionArea"></div>
+
+<script>
+    // REPLACE THESE WITH YOUR SUPABASE DETAILS
+    const SUPABASE_URL = "YOUR_SUPABASE_URL";
+    const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let wallet = 650.00;
+    const HOST_PASS = "GWAKGWAKGWAK";
+    let isHost = false;
+    let userName = "";
+
+    let friends = [];
+    let currentIndex = 0;
+
+    function initUser() {
+        while (!userName) {
+            userName = prompt("Welcome! Enter your Name / Team Name:") || "";
+            userName = userName.trim();
+        }
+        document.getElementById('userBadge').innerText = "👤 Team: " + userName;
+    }
+
+    async function loadCloudState() {
+        const { data } = await supabase.from('auction_state').select('*').eq('id', 1).single();
+        if (data) {
+            friends = data.friends || [];
+            currentIndex = data.current_index || 0;
+            renderActiveAuction();
+        }
+    }
+
+    async function syncCloudState() {
+        await supabase.from('auction_state').update({
+            friends: friends,
+            current_index: currentIndex
+        }).eq('id', 1);
+    }
+
+    // Subscribe to live changes across all devices
+    supabase.channel('public:auction_state')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'auction_state' }, payload => {
+            friends = payload.new.friends || [];
+            currentIndex = payload.new.current_index || 0;
+            renderActiveAuction();
+        })
+        .subscribe();
+
+    function claimHostAccess() {
+        if (prompt("Enter Host Password:") === HOST_PASS) {
+            isHost = true;
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('hostClaimBtn').innerText = "👑 Logged in as Host";
+            document.getElementById('hostClaimBtn').disabled = true;
+            renderActiveAuction();
+        } else {
+            alert("❌ Incorrect Password!");
+        }
+    }
+
+    function renderActiveAuction() {
+        const area = document.getElementById('activeAuctionArea');
+        area.innerHTML = '';
+
+        if (friends.length === 0) {
+            area.innerHTML = `<div class="auction-box" style="text-align: center; padding: 30px;">
+                <h3>⏳ AUCTION HAS NOT STARTED YET</h3>
+                <p style="color: #94a3b8; font-size: 13px;">Waiting for Host to add friends...</p>
+            </div>`;
+            return;
+        }
+
+        if (currentIndex >= friends.length) {
+            area.innerHTML = `<div class="auction-box" style="text-align: center; padding: 30px;">
+                <h2>🎉 AUCTION COMPLETE! 🎉</h2>
+            </div>`;
+            return;
+        }
+
+        const player = friends[currentIndex];
+        const card = document.createElement('div');
+        card.className = 'auction-box';
+        
+        let feedItems = (player.history || []).map(item => `<div class="feed-item">${item}</div>`).join('');
+
+        let hostControlsHTML = '';
+        if (isHost) {
+            hostControlsHTML = `
+                <div class="host-controls">
+                    <div style="font-size: 11px; color: #a5b4fc; font-weight: bold;">HOST CONTROLS:</div>
+                    <button class="btn-host-action" onclick="sendHostAnnouncement('Going once... 🔨')">1st Call 🔨</button>
+                    <button class="btn-host-action" onclick="sendHostAnnouncement('Going twice... 🔨🔨')">2nd Call 🔨🔨</button>
+                    <button class="btn-host-action" style="background:#ef4444; color:#fff;" onclick="sendHostAnnouncement('SOLD to ' + '${player.holder}' + ' for ₹${player.currentBid.toFixed(2)} Cr! 🎉🔨🔨🔨')">SOLD! 🔨🔨🔨</button>
+                    <button class="btn-host-action" style="background:#3b82f6; color:#fff; width:100%; margin-top:8px;" onclick="nextPlayer()">NEXT PLAYER ➡️</button>
+
+                    <div class="edit-box">
+                        <div style="font-size: 11px; color: #f59e0b; font-weight: bold;">✏️ EDIT PLAYER DETAILS:</div>
+                        <input type="text" id="editName" class="custom-input" value="${player.name}">
+                        <input type="text" id="editStats" class="custom-input" value="${player.stats}">
+                        <input type="text" id="editImg" class="custom-input" value="${player.img}">
+                        <input type="number" id="editBid" class="custom-input" value="${player.currentBid}">
+                        <button class="btn-host-action" style="background:#10b981; color:#fff; width:100%; margin-top:8px;" onclick="savePlayerEdits()">SAVE CHANGES</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div style="text-align:center;">
+                <span class="active-badge">🔴 LIVE AUCTION (${currentIndex + 1} OF ${friends.length})</span>
+            </div>
+            <div class="img-container">
+                <img src="${player.img || 'https://via.placeholder.com/400x300?text=No+Photo'}" alt="${player.name}">
+            </div>
+            <div class="player-details">
+                <h2 class="player-name">${player.name}</h2>
+                <div class="player-role">${player.stats}</div>
+            </div>
+            <div class="bid-display">
+                <div class="bidder-tag">CURRENT HIGHEST BID</div>
+                <div class="highest-bid">₹<span>${player.currentBid.toFixed(2)}</span> Cr</div>
+                <div class="bidder-tag">Held by: ${player.holder}</div>
+            </div>
+            ${hostControlsHTML}
+            <div class="input-group">
+                <div class="input-row">
+                    <input type="number" id="customBidAmount" class="custom-input" style="width: 45%;" placeholder="Bid (₹ Cr)">
+                    <input type="text" id="bidComment" class="custom-input" style="width: 55%;" placeholder="Roast / Comment...">
+                </div>
+                <button class="btn-bid" onclick="placeTypedBid()">SUBMIT BID</button>
+            </div>
+            <h4 style="margin-bottom: 5px; margin-top: 15px; font-size: 13px;">Bidding History & Roasts</h4>
+            <div class="feed">${feedItems}</div>
+        `;
+        area.appendChild(card);
+    }
+
+    async function addNewFriend() {
+        if (!isHost) return;
+        const name = document.getElementById('newFriendName').value.trim();
+        const stats = document.getElementById('newFriendStats').value.trim() || "No specs";
+        const img = document.getElementById('newFriendImg').value.trim();
+        const startBid = parseFloat(document.getElementById('newFriendStartBid').value) || 0.50;
+
+        if (!name) return alert("Enter friend's name!");
+
+        friends.push({
+            id: friends.length,
+            name: name,
+            stats: stats,
+            img: img || "",
+            currentBid: startBid,
+            holder: "Starting Price",
+            history: [`Auctioneer: Bidding starts at ₹${startBid.toFixed(2)} Cr!`]
+        });
+
+        document.getElementById('newFriendName').value = '';
+        document.getElementById('newFriendStats').value = '';
+        document.getElementById('newFriendImg').value = '';
+        document.getElementById('newFriendStartBid').value = '';
+
+        await syncCloudState();
+    }
+
+    async function savePlayerEdits() {
+        if (!isHost) return;
+        const player = friends[currentIndex];
+        player.name = document.getElementById('editName').value.trim();
+        player.stats = document.getElementById('editStats').value.trim();
+        player.img = document.getElementById('editImg').value.trim();
+        player.currentBid = parseFloat(document.getElementById('editBid').value) || player.currentBid;
+        
+        player.history.unshift(`<span class="feed-host">✏️ HOST UPDATED DETAILS FOR ${player.name.toUpperCase()}</span>`);
+        await syncCloudState();
+    }
+
+    async function placeTypedBid() {
+        const typedBid = parseFloat(document.getElementById('customBidAmount').value);
+        const comment = document.getElementById('bidComment').value.trim();
+        const player = friends[currentIndex];
+
+        if (!typedBid || typedBid <= player.currentBid) return alert("Bid higher than current bid!");
+        if ((typedBid - player.currentBid) > wallet) return alert("Insufficient budget!");
+
+        wallet -= (typedBid - player.currentBid);
+        player.currentBid = typedBid;
+        player.holder = userName;
+
+        player.history.unshift(`<span class="feed-user">${userName}</span> bid <span class="feed-amount">₹${typedBid.toFixed(2)} Cr</span> ${comment ? '— <i>"' + comment + '"</i>' : ''}`);
+
+        document.getElementById('userWallet').innerText = "Budget: ₹" + wallet.toFixed(2) + " Cr";
+        await syncCloudState();
+    }
+
+    async function sendHostAnnouncement(text) {
+        friends[currentIndex].history.unshift(`<span class="feed-host">📢 AUCTIONEER:</span> ${text}`);
+        await syncCloudState();
+    }
+
+    async function nextPlayer() {
+        if (!isHost) return;
+        currentIndex++;
+        await syncCloudState();
+    }
+
+    initUser();
+    loadCloudState();
+</script>
+</body>
+</html>
